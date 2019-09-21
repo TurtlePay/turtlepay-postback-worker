@@ -1,6 +1,6 @@
-# TurtlePay™: Postback Worker
+# TurtlePay®: Postback Worker
 
-This repository contains the worker that processes the postback requests as a result of various actions performed by the TurtlePay™ platform.
+This repository contains the worker that processes the postback requests as a result of various actions performed by the TurtlePay® platform.
 
 ## Prerequisites
 
@@ -54,4 +54,4 @@ pm2 start index.js --name turtlepay-postback-worker -i max
 pm2 save
 ```
 
-###### (c) 2018-2019 TurtlePay™ Development Team
+###### (c) 2018-2019 TurtlePay® Development Team
