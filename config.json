@@ -2,5 +2,5 @@
   "queues": {
     "complete": "complete.wallet"
   },
-  "postTimeout": 5000
+  "postTimeout": 10000
 }
