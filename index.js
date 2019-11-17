@@ -9,9 +9,9 @@ const cluster = require('cluster')
 require('colors')
 const Config = require('./config.json')
 const cpuCount = Math.ceil(require('os').cpus().length / 8)
-const Helpers = require('./lib/helpers.js')
-const MessageSigner = require('./lib/messageSigner.js')
-const RabbitMQ = require('./lib/rabbit.js')
+const Logger = require('./lib/logger')
+const MessageSigner = require('./lib/messageSigner')
+const RabbitMQ = require('./lib/rabbit')
 const request = require('request-promise-native')
 const signer = new MessageSigner()
 const util = require('util')
@@ -22,44 +22,44 @@ function spawnNewWorker () {
 
 if (cluster.isMaster) {
   if (!process.env.NODE_ENV || process.env.NODE_ENV.toLowerCase() !== 'production') {
-    Helpers.log('[WARNING] Node.js is not running in production mode. Consider running in production mode: export NODE_ENV=production'.yellow)
+    Logger.warning('Node.js is not running in production mode. Consider running in production mode: export NODE_ENV=production'.yellow)
   }
 
-  Helpers.log('Starting TurtlePay Postback Service...')
+  Logger.log('Starting TurtlePay Postback Service...')
 
   for (var cpuThread = 0; cpuThread < cpuCount; cpuThread++) {
     spawnNewWorker()
   }
 
   cluster.on('exit', (worker, code, signal) => {
-    Helpers.log(util.format('worker %s died', worker.process.pid))
+    Logger.error('Worker %s died', worker.process.pid)
     spawnNewWorker()
   })
 } else if (cluster.isWorker) {
   const rabbit = new RabbitMQ(process.env.RABBIT_PUBLIC_SERVER || 'localhost', process.env.RABBIT_PUBLIC_USERNAME || '', process.env.RABBIT_PUBLIC_PASSWORD || '', false)
 
   rabbit.on('log', log => {
-    Helpers.log(util.format('[RABBIT] %s', log))
+    Logger.log('[RABBIT] %s', log)
   })
 
   rabbit.on('connect', () => {
-    Helpers.log(util.format('[RABBIT] connected to server at %s', process.env.RABBIT_PUBLIC_SERVER || 'localhost'))
+    Logger.log('[RABBIT] connected to server at %s', process.env.RABBIT_PUBLIC_SERVER || 'localhost')
   })
 
   rabbit.on('disconnect', (error) => {
-    Helpers.log(util.format('[RABBIT] lost connected to server: %s', error.toString()))
+    Logger.error('[RABBIT] lost connected to server: %s', error.toString())
     cluster.worker.kill()
   })
 
   rabbit.on('message', (queue, message, payload) => {
     if (!payload.request.callback) {
-      Helpers.log(util.format('Worker #%s: Caller did not provide a callback for %s', cluster.worker.id, payload.address).red)
+      Logger.warning('Worker #%s: Caller did not provide a callback for %s', cluster.worker.id, payload.address)
       return rabbit.ack(message)
     }
 
     if (payload.request.callback.substring(0, 4).toLowerCase() !== 'http') {
       /* They didn't supply a valid callback, we're done here */
-      Helpers.log(util.format('Worker #%s: No valid callback location available for processed payment to %s [%s]', cluster.worker.id, payload.address, payload.status).red)
+      Logger.warning('Worker #%s: No valid callback location available for processed payment to %s [%s]', cluster.worker.id, payload.address, payload.status)
       return rabbit.ack(message)
     }
 
@@ -121,7 +121,7 @@ if (cluster.isMaster) {
     }
 
     /* If we have a URL that we can post to, then we're going to give it a try */
-    request({
+    return request({
       url: payload.request.callback,
       method: 'POST',
       json: true,
@@ -140,25 +140,25 @@ if (cluster.isMaster) {
         key: Buffer.from(payload.privateKey, 'hex')
       },
       timeout: Config.postTimeout
-    }).then(() => {
-      /* Success, we posted the message to the caller */
-      Helpers.log(util.format('Worker #%s: Successfully delivered [%s] message for %s to %s', cluster.worker.id, payload.status, payload.address, payload.request.callback).green)
-      return rabbit.ack(message)
-    }).catch(() => {
-      /* Success, we posted the message to the caller */
-      Helpers.log(util.format('Worker #%s: Failed to deliver [%s] message for %s  to %s', cluster.worker.id, payload.status, payload.address, payload.request.callback).yellow)
-      return rabbit.ack(message)
     })
+      .then(() => {
+      /* Success, we posted the message to the caller */
+        Logger.info('Worker #%s: Successfully delivered [%s] message for %s to %s', cluster.worker.id, payload.status, payload.address, payload.request.callback)
+        return rabbit.ack(message)
+      })
+      .catch(() => {
+      /* Success, we posted the message to the caller */
+        Logger.error('Worker #%s: Failed to deliver [%s] message for %s  to %s', cluster.worker.id, payload.status, payload.address, payload.request.callback)
+        return rabbit.ack(message)
+      })
   })
 
-  rabbit.connect().then(() => {
-    return rabbit.createQueue(Config.queues.complete, true)
-  }).then(() => {
-    return rabbit.registerConsumer(Config.queues.complete, 1)
-  }).then(() => {
-    Helpers.log(util.format('Worker #%s awaiting requests', cluster.worker.id))
-  }).catch((error) => {
-    Helpers.log(util.format('Error in worker #%s: %s', cluster.worker.id, error.toString()))
-    cluster.worker.kill()
-  })
+  rabbit.connect()
+    .then(() => { return rabbit.createQueue(Config.queues.complete, true) })
+    .then(() => { return rabbit.registerConsumer(Config.queues.complete, 1) })
+    .then(() => { Logger.log('Worker #%s awaiting requests', cluster.worker.id) })
+    .catch(error => {
+      Logger.error('Error in worker #%s: %s', cluster.worker.id, error.toString())
+      cluster.worker.kill()
+    })
 }
