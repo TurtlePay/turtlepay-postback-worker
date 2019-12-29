@@ -29,6 +29,7 @@
     "dotenv": "^8.1.0",
     "pem": "^1.14.3",
     "request": "^2.88.0",
-    "request-promise-native": "^1.0.7"
+    "request-promise-native": "^1.0.7",
+    "turtlecoin-utils": "^1.0.5"
   }
 }

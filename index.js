@@ -14,7 +14,10 @@ const MessageSigner = require('./lib/messageSigner')
 const RabbitMQ = require('./lib/rabbit')
 const request = require('request-promise-native')
 const signer = new MessageSigner()
+const TurtleCoinUtils = require('turtlecoin-utils').CryptoNote
 const util = require('util')
+
+const cryptoUtils = new TurtleCoinUtils()
 
 function spawnNewWorker () {
   cluster.fork()
@@ -118,6 +121,20 @@ if (cluster.isMaster) {
     /* If we have the keys for the one-time use wallet, add that in */
     if (payload.keys) {
       postbackPayload.keys = payload.keys
+    }
+
+    /* If there is a payment ID included in the response, then we
+       need to override the address in the response and include the
+       payment ID in the response */
+    if (payload.paymentId) {
+      postbackPayload.paymentId = payload.paymentId
+      postbackPayload.address = cryptoUtils.createIntegratedAddress(postbackPayload.address, postbackPayload.paymentId)
+    }
+
+    /* If we have an array of transactions that received funds, include
+       that information in the postback */
+    if (payload.transactions) {
+      postbackPayload.transactions = payload.transactions
     }
 
     /* If we have a URL that we can post to, then we're going to give it a try */
