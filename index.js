@@ -144,7 +144,7 @@ if (cluster.isMaster) {
       json: true,
       body: postbackPayload,
       headers: {
-        digest: util.format('SHA-256=', signer.digest(postbackPayload, 'base64'))
+        digest: util.format('SHA-256=%s', signer.digest(postbackPayload, 'base64'))
       },
       httpSignature: {
         algorithm: 'rsa-sha256',
